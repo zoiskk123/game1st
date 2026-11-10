@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Star Catcher – Mini Game</title>
+<style>
+*{box-sizing:border-box;margin:0}
+html,body{height:100%;background:#0b1d35;font-family:Georgia,serif;color:#fff;overflow:hidden}
+body{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+  background:radial-gradient(circle at 50% 0,#2a2468,#0b1d35 70%)}
+h1{font-size:22px;font-weight:normal;letter-spacing:.2em;text-transform:uppercase;
+  background:linear-gradient(90deg,#9ee7e3,#ffe2a8,#ef6f61);-webkit-background-clip:text;background-clip:text;color:transparent}
+canvas{max-width:96vw;max-height:80vh;aspect-ratio:3/4;border-radius:18px;touch-action:none;cursor:none;
+  box-shadow:0 25px 60px rgba(0,0,0,.5),0 0 0 2px rgba(255,255,255,.12)}
+p{font:12px Arial,sans-serif;letter-spacing:.1em;color:#9eacbd;text-transform:uppercase}
+</style>
+</head>
+<body>
+<h1>Star Catcher</h1>
+<canvas id="c" width="480" height="640"></canvas>
+<p>Move: mouse / touch / ← → keys &nbsp;·&nbsp; Catch ★ and ◆, avoid the bombs</p>
+<script>
+(function(){
+var cv=document.getElementById('c'),x=cv.getContext('2d'),W=480,H=640;
+var state='menu',score=0,lives=3,best=0,items=[],parts=[],stars=[],t=0,shake=0;
+try{best=+localStorage.getItem('starBest')||0}catch(e){}
+var pl={x:W/2,w:96,h:16,y:H-46,tx:W/2},keys={};
+for(var i=0;i<60;i++)stars.push({x:Math.random()*W,y:Math.random()*H,s:Math.random()*1.5+.3});
+
+function reset(){score=0;lives=3;items=[];parts=[];t=0;pl.x=pl.tx=W/2;state='play'}
+function spawn(){
+  var r=Math.random(),type=r<.62?'star':r<.74?'gem':'bomb';
+  items.push({x:24+Math.random()*(W-48),y:-20,type:type,vy:(2+Math.min(score/40,4))*(.8+Math.random()*.5),rot:0,r:type=='bomb'?15:13});
+}
+function burst(px,py,col,n){for(var i=0;i<n;i++){var a=Math.random()*6.283,s=Math.random()*4+1;
+  parts.push({x:px,y:py,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:1,col:col})}}
+
+function pos(e){var r=cv.getBoundingClientRect(),p=e.touches?e.touches[0]:e;return (p.clientX-r.left)/r.width*W}
+cv.addEventListener('mousemove',function(e){pl.tx=pos(e)});
+cv.addEventListener('touchmove',function(e){pl.tx=pos(e);e.preventDefault()},{passive:false});
+function act(){if(state!='play')reset()}
+cv.addEventListener('mousedown',act);
+cv.addEventListener('touchstart',function(e){pl.tx=pos(e);act()},{passive:true});
+addEventListener('keydown',function(e){keys[e.key]=1;if(e.key==' '||e.key=='Enter')act();if(e.key.indexOf('Arrow')==0)e.preventDefault()});
+addEventListener('keyup',function(e){keys[e.key]=0});
+
+function drawStar(cx,cy,r,rot,col){x.save();x.translate(cx,cy);x.rotate(rot);x.fillStyle=col;x.shadowColor=col;x.shadowBlur=16;x.beginPath();
+  for(var i=0;i<10;i++){var a=i*Math.PI/5-Math.PI/2,rr=i%2?r*.45:r;x.lineTo(Math.cos(a)*rr,Math.sin(a)*rr)}x.closePath();x.fill();x.restore()}
+function drawGem(cx,cy,r,rot){x.save();x.translate(cx,cy);x.rotate(rot*.5);x.fillStyle='#1fa5a0';x.shadowColor='#1fa5a0';x.shadowBlur=16;
+  x.beginPath();x.moveTo(0,-r);x.lineTo(r,0);x.lineTo(0,r);x.lineTo(-r,0);x.closePath();x.fill();x.restore()}
+function drawBomb(cx,cy,r){x.save();x.translate(cx,cy);x.fillStyle='#ef6f61';x.shadowColor='#ef6f61';x.shadowBlur=18;
+  x.beginPath();x.arc(0,0,r,0,6.283);x.fill();x.shadowBlur=0;x.fillStyle='#10243e';x.font='bold 16px Arial';x.textAlign='center';x.textBaseline='middle';x.fillText('✕',0,1);
+  x.strokeStyle='#ffe2a8';x.lineWidth=2;x.beginPath();x.moveTo(5,-r+2);x.lineTo(10,-r-6);x.stroke();x.restore()}
+
+function update(){
+  t++;
+  if(keys.ArrowLeft||keys.a)pl.tx-=9;if(keys.ArrowRight||keys.d)pl.tx+=9;
+  pl.tx=Math.max(pl.w/2,Math.min(W-pl.w/2,pl.tx));pl.x+=(pl.tx-pl.x)*.28;
+  if(state=='play'){
+    if(t%Math.max(14,40-Math.floor(score/6))==0)spawn();
+    for(var i=items.length-1;i>=0;i--){var it=items[i];it.y+=it.vy;it.rot+=.05;
+      var hit=it.y+it.r>pl.y&&it.y-it.r<pl.y+pl.h&&Math.abs(it.x-pl.x)<pl.w/2+it.r*.6;
+      if(hit){
+        if(it.type=='bomb'){lives--;shake=14;burst(it.x,it.y,'#ef6f61',26);
+          if(lives<=0){state='over';if(score>best){best=score;try{localStorage.setItem('starBest',best)}catch(e){}}}}
+        else{score+=it.type=='gem'?3:1;burst(it.x,it.y,it.type=='gem'?'#9ee7e3':'#ffe2a8',14)}
+        items.splice(i,1);
+      }else if(it.y>H+30)items.splice(i,1);
+    }
+  }
+  for(i=parts.length-1;i>=0;i--){var p=parts[i];p.x+=p.vx;p.y+=p.vy;p.vy+=.12;p.life-=.025;if(p.life<=0)parts.splice(i,1)}
+  for(i=0;i<stars.length;i++){stars[i].y+=stars[i].s*.4;if(stars[i].y>H)stars[i].y=0}
+  if(shake>0)shake--;
+}
+
+function text(s,y,size,col,a){x.fillStyle=col||'#fff';x.font=(a||'')+' '+size+'px Georgia';x.textAlign='center';x.fillText(s,W/2,y)}
+
+function draw(){
+  x.save();
+  if(shake)x.translate((Math.random()-.5)*shake,(Math.random()-.5)*shake);
+  var g=x.createLinearGradient(0,0,0,H);g.addColorStop(0,'#10243e');g.addColorStop(1,'#2a2468');
+  x.fillStyle=g;x.fillRect(-20,-20,W+40,H+40);
+  x.fillStyle='rgba(255,255,255,.6)';
+  stars.forEach(function(s){x.globalAlpha=.3+s.s/2;x.fillRect(s.x,s.y,s.s,s.s)});x.globalAlpha=1;
+  items.forEach(function(it){it.type=='star'?drawStar(it.x,it.y,it.r,it.rot,'#ffd36b'):it.type=='gem'?drawGem(it.x,it.y,it.r,it.rot):drawBomb(it.x,it.y,it.r)});
+  parts.forEach(function(p){x.globalAlpha=p.life;x.fillStyle=p.col;x.beginPath();x.arc(p.x,p.y,3*p.life+1,0,6.283);x.fill()});x.globalAlpha=1;
+  /* player */
+  var pg=x.createLinearGradient(pl.x-pl.w/2,0,pl.x+pl.w/2,0);pg.addColorStop(0,'#1fa5a0');pg.addColorStop(.5,'#7a5af8');pg.addColorStop(1,'#ef6f61');
+  x.fillStyle=pg;x.shadowColor='#7a5af8';x.shadowBlur=20;x.beginPath();x.roundRect(pl.x-pl.w/2,pl.y,pl.w,pl.h,8);x.fill();x.shadowBlur=0;
+  /* HUD */
+  x.textAlign='left';x.fillStyle='#fff';x.font='bold 22px Georgia';x.fillText('★ '+score,18,34);
+  x.textAlign='right';x.fillStyle='#ef6f61';x.fillText('♥'.repeat(Math.max(lives,0)),W-18,34);
+  x.textAlign='center';x.fillStyle='#9eacbd';x.font='13px Arial';x.fillText('BEST '+best,W/2,32);
+  if(state=='menu'){x.fillStyle='rgba(11,29,53,.72)';x.fillRect(0,0,W,H);
+    text('Star Catcher',H/2-40,44,'#ffe2a8');text('Catch ★ stars  ·  ◆ gems = 3 pts',H/2+6,17,'#d7e0eb');
+    text('Avoid the bombs  ·  3 lives',H/2+34,17,'#d7e0eb');
+    x.globalAlpha=.6+.4*Math.sin(t/12);text('Click, tap or press Space to start',H/2+100,18,'#9ee7e3');x.globalAlpha=1}
+  if(state=='over'){x.fillStyle='rgba(11,29,53,.8)';x.fillRect(0,0,W,H);
+    text('Game Over',H/2-50,46,'#ef6f61');text('Score: '+score,H/2,26,'#fff');
+    text(score>=best&&score>0?'New best score! 🏆':'Best: '+best,H/2+36,17,'#ffe2a8');
+    x.globalAlpha=.6+.4*Math.sin(t/12);text('Click, tap or press Space to play again',H/2+100,17,'#9ee7e3');x.globalAlpha=1}
+  x.restore();
+}
+(function loop(){update();draw();requestAnimationFrame(loop)})();
+})();
+</script>
+</body>
+</html>
